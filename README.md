@@ -147,6 +147,84 @@ dsh plugin --profile web add ./dsh-memory-tdai-1.0.0.tgz
 
 ---
 
+## 🧠 Embedding 配置（专业用户）
+
+> 默认零配置即可运行（关键词检索）。需要**语义级检索**（向量 + 关键词混合、RRF 融合排序）时，配置一个 OpenAI 兼容的 embedding 端点即可。DeepSeek 官方 API 没有 embedding 端点，需使用第三方 OpenAI 兼容服务。
+
+### 完整字段
+
+在 bundle 行 config 的 `embedding` 组下（`~/.dsh/profiles/web/cordis.patch.yml` 给 `memory-tdai` 行加 config）：
+
+| 字段 | 必填 | 默认 | 说明 |
+|---|---|---|---|
+| `enabled` | 否 | `true` | 总开关（provider 为 `none` 时仍视为禁用） |
+| `provider` | 是 | `none` | 任意非 `none`/`local` 的值（如 `openai`、`dashscope`）都被当作 OpenAI 兼容远端；`qclaw` 走本地代理转发 |
+| `baseUrl` | 是 | — | 兼容端点的 base URL，如 `https://dashscope.aliyuncs.com/compatible-mode/v1` |
+| `apiKey` | 是 | — | 端点密钥 |
+| `model` | 是 | — | 模型名，如 `text-embedding-v4`、`text-embedding-3-small`、`BAAI/bge-m3` |
+| `dimensions` | 是 | — | **向量维度，必须与模型输出一致**（见下表），不一致会导致向量表建错、查询全空 |
+| `sendDimensions` | 否 | `true` | 是否在请求体里发送 `dimensions` 字段。OpenAI `text-embedding-3-*` 支持（Matryoshka 可降维）；BGE-M3 等开源模型会拒绝未知字段（HTTP 400），设 `false` |
+| `maxInputChars` | 否 | `5000` | 单条文本超长截断阈值 |
+| `timeoutMs` | 否 | `10000` | 单次 embedding 请求超时 |
+| `recallTimeoutMs` | 否 | 同上 | 回忆路径超时（用户侧，应更短） |
+| `captureTimeoutMs` | 否 | 同上 | 捕获路径超时（后台，可更长） |
+| `conflictRecallTopK` | 否 | `5` | L1 去重时的候选召回数 |
+| `proxyUrl` | 否 | — | 仅 `provider="qclaw"` 时使用（本地代理转发） |
+
+### 常用端点示例
+
+```yaml
+# ~/.dsh/profiles/web/cordis.patch.yml
+- insert:
+    - id: memory-tdai
+      name: 'dsh-memory-tdai'
+      config:
+        embedding:
+          enabled: true
+          provider: dashscope
+          baseUrl: https://dashscope.aliyuncs.com/compatible-mode/v1
+          apiKey: sk-xxxxxxxx
+          model: text-embedding-v4
+          dimensions: 1024
+          sendDimensions: false
+```
+
+| 端点 | baseUrl | 示例模型 | dimensions | sendDimensions |
+|---|---|---|---|---|
+| 阿里云百炼 | `https://dashscope.aliyuncs.com/compatible-mode/v1` | `text-embedding-v4` | 1024 | `false` |
+| 阿里云百炼 | 同上 | `qwen3-embedding-0.6b` / `qwen3-embedding-4b` | 1024（可调） | `false` |
+| OpenAI | `https://api.openai.com/v1` | `text-embedding-3-small` | 1536 | `true` |
+| 硅基流动 | `https://api.siliconflow.cn/v1` | `BAAI/bge-m3` | 1024 | `false` |
+| vLLM/Ollama 自托管 | 你的网关地址 | 任意兼容模型 | 按模型 | `false` |
+
+### 检索策略（`recall` 组）
+
+`recall.strategy` 三选一（默认 `hybrid`）：
+
+| 值 | 行为 | 适合 |
+|---|---|---|
+| `hybrid` | 向量 + 关键词（FTS5）双路召回，RRF 融合排序 | 默认推荐 |
+| `embedding` | 仅向量召回 | 配置了 embedding 且语料语义密度高 |
+| `keyword` | 仅关键词（FTS5 + jieba） | 未配置 embedding，或精确术语/代码检索 |
+
+```yaml
+config:
+  recall:
+    strategy: hybrid        # embedding | keyword | hybrid
+    maxResults: 5           # 单次回忆最多条数
+    scoreThreshold: 0.3     # 相关度阈值
+    maxTotalRecallChars: 0  # 注入总字符上限（0=不限）
+```
+
+### ⚠️ 注意事项
+
+1. **`dimensions` 与模型不匹配 = 检索全空**：向量表按维度建，维度错了写入会失败或查询全空。改维度/模型后 store 检测到 provider 变化会自动触发**全量重向量化**（历史记忆重新 embed，耗时取决于语料量）。
+2. **apiKey 明文**：当前版本密钥明文写在 `cordis.patch.yml`。介意请勿将 profile 目录提交到 git；后续版本规划接入 DSH `credentials` 服务。
+3. **qclaw 特殊模式**：`provider="qclaw"` 时请求经 `proxyUrl` 本地代理转发（腾讯云向量网关场景）。
+4. **验证**：改完重启后，日志应出现 `Store created: ... embedding=enabled`；用 `memory_search` 查一个与语料语义相关但不含字面词的查询（如记忆里有"咖啡"，查"提神的饮品"），命中即向量生效。
+
+---
+
 ## 🔬 工作原理（深入）
 
 - **事件溯源式捕获**：`agent/turn-stopping` 时读取会话增量消息，按消息数游标去重，写入 L0。

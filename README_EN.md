@@ -185,6 +185,97 @@ memories), etc.
 
 ---
 
+## 🧠 Embedding configuration (for advanced users)
+
+> Zero-config runs in keyword mode. For **semantic retrieval** (vector +
+> keyword hybrid, RRF fusion ranking), configure an OpenAI-compatible
+> embedding endpoint. DeepSeek's official API has **no embedding endpoint** —
+> use any third-party OpenAI-compatible service.
+
+### Full field reference
+
+Under the `embedding` group of the bundle row config
+(`~/.dsh/profiles/web/cordis.patch.yml`, add `config` to the `memory-tdai` row):
+
+| Field | Required | Default | Notes |
+|---|---|---|---|
+| `enabled` | no | `true` | Master switch (still disabled when `provider: none`) |
+| `provider` | yes | `none` | Any value other than `none`/`local` (e.g. `openai`, `dashscope`) is treated as an OpenAI-compatible remote; `qclaw` routes through a local proxy |
+| `baseUrl` | yes | — | Compatible endpoint base URL, e.g. `https://dashscope.aliyuncs.com/compatible-mode/v1` |
+| `apiKey` | yes | — | Endpoint key |
+| `model` | yes | — | Model id, e.g. `text-embedding-v4`, `text-embedding-3-small`, `BAAI/bge-m3` |
+| `dimensions` | yes | — | **Vector dimensions — must match the model output** (table below); a mismatch corrupts the vector table / returns empty results |
+| `sendDimensions` | no | `true` | Whether to send the `dimensions` field in the request body. OpenAI `text-embedding-3-*` supports it (Matryoshka); OSS models like BGE-M3 reject unknown fields (HTTP 400) → set `false` |
+| `maxInputChars` | no | `5000` | Truncation threshold per text |
+| `timeoutMs` | no | `10000` | Per-request timeout |
+| `recallTimeoutMs` | no | same | Recall-path timeout (user-facing, should be shorter) |
+| `captureTimeoutMs` | no | same | Capture-path timeout (background, may be longer) |
+| `conflictRecallTopK` | no | `5` | Candidate recall count for L1 dedup |
+| `proxyUrl` | no | — | Only for `provider="qclaw"` (local proxy forwarding) |
+
+### Endpoint examples
+
+```yaml
+# ~/.dsh/profiles/web/cordis.patch.yml
+- insert:
+    - id: memory-tdai
+      name: 'dsh-memory-tdai'
+      config:
+        embedding:
+          enabled: true
+          provider: dashscope
+          baseUrl: https://dashscope.aliyuncs.com/compatible-mode/v1
+          apiKey: sk-xxxxxxxx
+          model: text-embedding-v4
+          dimensions: 1024
+          sendDimensions: false
+```
+
+| Endpoint | baseUrl | Example model | dimensions | sendDimensions |
+|---|---|---|---|---|
+| Aliyun Bailian | `https://dashscope.aliyuncs.com/compatible-mode/v1` | `text-embedding-v4` | 1024 | `false` |
+| Aliyun Bailian | same | `qwen3-embedding-0.6b` / `qwen3-embedding-4b` | 1024 (tunable) | `false` |
+| OpenAI | `https://api.openai.com/v1` | `text-embedding-3-small` | 1536 | `true` |
+| SiliconFlow | `https://api.siliconflow.cn/v1` | `BAAI/bge-m3` | 1024 | `false` |
+| vLLM/Ollama self-hosted | your gateway | any compatible model | per model | `false` |
+
+### Retrieval strategy (`recall` group)
+
+`recall.strategy`, one of three (default `hybrid`):
+
+| Value | Behavior | Best for |
+|---|---|---|
+| `hybrid` | vector + keyword (FTS5) dual recall, RRF fusion | recommended default |
+| `embedding` | vector-only recall | embedding configured, semantically dense corpus |
+| `keyword` | keyword-only (FTS5 + jieba) | no embedding, or exact-term/code retrieval |
+
+```yaml
+config:
+  recall:
+    strategy: hybrid        # embedding | keyword | hybrid
+    maxResults: 5           # max memories per recall
+    scoreThreshold: 0.3     # relevance threshold
+    maxTotalRecallChars: 0  # total injection cap (0 = unlimited)
+```
+
+### ⚠️ Notes
+
+1. **`dimensions` mismatch = empty retrieval**: the vector table is built at
+   that dimension; wrong values break writes or return nothing. After changing
+   dimensions/model the store detects the provider change and triggers a
+   **full re-embed** of historical memories (time depends on corpus size).
+2. **apiKey is plaintext** in `cordis.patch.yml` for now. Don't commit your
+   profile directory to git if that matters; DSH `credentials` service
+   integration is planned for a future release.
+3. **qclaw mode**: `provider="qclaw"` forwards requests through `proxyUrl`
+   (Tencent Cloud vector-gateway scenario).
+4. **Verify**: after restart, logs should show `Store created: ...
+   embedding=enabled`; search `memory_search` with a semantically related but
+   literal-word-free query (e.g. memory contains "coffee", query "wake-up
+   drinks") — a hit means vectors are active.
+
+---
+
 ## 🔬 How it works (deep dive)
 
 - **Event-sourced capture**: on `agent/turn-stopping`, incremental session
