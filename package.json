@@ -38,5 +38,10 @@
     "bm25",
     "agent-memory",
     "tencentdb"
-  ]
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Jason-Liao/dsh-memory-tdai.git"
+  },
+  "homepage": "https://github.com/Jason-Liao/dsh-memory-tdai#readme"
 }
