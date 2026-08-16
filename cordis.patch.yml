@@ -1,0 +1,13 @@
+# dsh-memory-tdai bundle layer.
+# Mounted by `dsh plugin --profile web add <this package>`:
+# the CLI reconciles dsh.profile.bundles against installed packages and
+# appends this package when it declares dsh.bundle (see package.json).
+#
+# Runtime defaults (overridable via row config or DSH_MEMORY_* env):
+#   - dataDir: $DSH_HOME/memory-tdai
+#   - provider/model: the deployment's agent default model route
+#     (deepseek-official / deepseek-v4-flash), or DSH_MEMORY_PROVIDER/DSH_MEMORY_MODEL
+#   - capture.enabled / recall.enabled / extraction.enabled: true
+- insert:
+    - id: memory-tdai
+      name: 'dsh-memory-tdai'

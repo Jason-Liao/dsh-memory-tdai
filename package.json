@@ -1,0 +1,42 @@
+{
+  "name": "dsh-memory-tdai",
+  "version": "1.0.0",
+  "description": "Four-layer long-term memory for DeepSeek Harness (L0 conversation → L1 atoms → L2 scenes → L3 persona) with auto-recall and auto-capture — adapted from TencentCloud/TencentDB-Agent-Memory",
+  "type": "module",
+  "main": "lib/index.js",
+  "types": "lib/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./lib/index.d.ts",
+      "default": "./lib/index.js"
+    }
+  },
+  "files": [
+    "lib/index.js",
+    "cordis.patch.yml",
+    "README.md"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  },
+  "dependencies": {
+    "@node-rs/jieba": "^2.0.1",
+    "sqlite-vec": "0.1.7-alpha.2",
+    "undici": "^8.1.0"
+  },
+  "license": "MIT",
+  "keywords": [
+    "deepseek-harness",
+    "dsh",
+    "dsh-plugin",
+    "memory",
+    "long-term-memory",
+    "vector-search",
+    "sqlite",
+    "bm25",
+    "agent-memory",
+    "tencentdb"
+  ]
+}
