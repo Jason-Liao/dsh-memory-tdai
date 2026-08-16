@@ -1,5 +1,7 @@
 # dsh-memory-tdai
 
+[English](README_EN.md) | 中文
+
 **DeepSeek Harness 的四层长期记忆插件** —— 把 [TencentDB-Agent-Memory](https://github.com/TencentCloud/TencentDB-Agent-Memory) 从 OpenClaw 完整移植到 DSH。
 
 让 DeepSeek 模型**记住你**：对话被自动整理成"原始记录 → 原子记忆 → 场景块 → 人设档案"四层结构，跨会话检索、自动回忆、自动归档。模型不需要把历史对话反复塞进上下文，也能知道你的偏好、习惯和项目背景。
